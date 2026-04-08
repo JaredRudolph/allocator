@@ -89,7 +89,8 @@ def compute_weights(
         else:
             # Closed-form minimum variance: w* = Sigma^-1 @ 1 / (1^T @ Sigma^-1 @ 1)
             # More numerically reliable than SLSQP on the variance objective directly.
-            # Clamp negatives from floating point errors then re-normalize for long-only.
+            # Clamp negatives from floating point errors then re-normalize for
+            # long-only.
             cov_inv = np.linalg.inv(cov.values)
             ones = np.ones(n)
             raw_w = cov_inv @ ones / (ones @ cov_inv @ ones)
