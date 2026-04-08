@@ -15,7 +15,7 @@ def compute_weights(
 
     Args:
         returns: DataFrame of daily returns, one column per asset.
-        objective: One of 'max_sharpe', 'min_vol', or 'equal_weight'.
+        objective: One of 'max_sharpe', 'max_sortino', 'min_vol', or 'equal_weight'.
         risk_free_rate: Annualized risk-free rate used in Sharpe calculation.
         bounds: Per-asset (min, max) weight bounds passed to the optimizer.
             When None, long-only with no upper cap is assumed.
@@ -32,6 +32,12 @@ def compute_weights(
         return np.full(n, 1.0 / n)
 
     window = returns.iloc[-ROLLING_WINDOW_DAYS:]
+
+    if len(window) <= n:
+        # Covariance matrix is degenerate with fewer observations than assets.
+        # Fall back to equal weight until enough history accumulates.
+        return np.full(n, 1.0 / n)
+
     mean_returns = window.mean()
     cov = window.cov()
 
@@ -73,6 +79,28 @@ def compute_weights(
                 constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1.0}],
             )
 
+    elif objective == "max_sortino":
+        daily_rf = risk_free_rate / 252
+        active_bounds = bounds if bounds is not None else [(0.0, None)] * n
+
+        def neg_sortino(w):
+            port_returns = window.values @ w
+            excess = port_returns - daily_rf
+            downside = excess[excess < 0]
+            if len(downside) == 0:
+                return 0.0
+            downside_std = np.sqrt((downside**2).mean()) * np.sqrt(252)
+            port_return = np.dot(w, mean_returns) * 252
+            return -(port_return - risk_free_rate) / downside_std
+
+        result = minimize(
+            neg_sortino,
+            w0,
+            method="SLSQP",
+            bounds=active_bounds,
+            constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1.0}],
+        )
+
     elif objective == "min_vol":
         if bounds is not None:
             # Closed-form does not support bounds -- fall back to SLSQP.
@@ -100,7 +128,7 @@ def compute_weights(
     else:
         raise ValueError(
             f"Unknown objective '{objective}'. "
-            "Use 'max_sharpe', 'min_vol', or 'equal_weight'."
+            "Use 'max_sharpe', 'max_sortino', 'min_vol', or 'equal_weight'."
         )
 
     return result.x
