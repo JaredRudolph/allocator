@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from allocator.pipeline import run_pipeline
+from corridor_backtest.pipeline import run_pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ def patch_fetch(monkeypatch):
     def _fetch(tickers, start, end=None):
         return _make_prices(tickers=tickers)
 
-    monkeypatch.setattr("allocator.pipeline.fetch_prices", _fetch)
+    monkeypatch.setattr("corridor_backtest.pipeline.fetch_prices", _fetch)
 
 
 # ---------------------------------------------------------------------------
@@ -151,13 +151,13 @@ def test_run_pipeline_band_search_patches_best_band(monkeypatch):
         return _make_prices(tickers=tickers)
 
     def _search_band(prices, config):
-        from allocator.band_search import search_band as real_search_band
+        from corridor_backtest.band_search import search_band as real_search_band
         best_band, results = real_search_band(prices, config)
         captured["best_band"] = best_band
         return best_band, results
 
-    monkeypatch.setattr("allocator.pipeline.fetch_prices", _fetch)
-    monkeypatch.setattr("allocator.pipeline.search_band", _search_band)
+    monkeypatch.setattr("corridor_backtest.pipeline.fetch_prices", _fetch)
+    monkeypatch.setattr("corridor_backtest.pipeline.search_band", _search_band)
 
     cfg = _base_config()
     cfg["rebalance"]["mode"] = "corridor"
