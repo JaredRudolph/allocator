@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from allocator.rebalance import (
+from corridor_backtest.rebalance import (
     _bands,
     _breached,
     _on_schedule,
