@@ -42,7 +42,10 @@ def sharpe(portfolio_value: pd.Series, risk_free_rate: float = 0.0) -> float:
     daily_returns = portfolio_value.pct_change().dropna()
     daily_rf = risk_free_rate / 252
     excess = daily_returns - daily_rf
-    return float(excess.mean() / excess.std() * np.sqrt(252))
+    std = excess.std()
+    if std == 0:
+        return float("nan")
+    return float(excess.mean() / std * np.sqrt(252))
 
 
 def sortino(portfolio_value: pd.Series, risk_free_rate: float = 0.0) -> float:
@@ -126,10 +129,9 @@ def summarize(
     }
 
     weight_cols = [c for c in results.columns if c.endswith("_weight")]
-    final_row = results.iloc[-1]
     for col in weight_cols:
         ticker = col.replace("_weight", "")
-        summary[f"{ticker}_final_weight"] = float(final_row[col])
+        summary[f"{ticker}_avg_weight"] = float(results[col].mean())
 
     if benchmark is not None:
         benchmark = benchmark.reindex(pv.index).dropna()
