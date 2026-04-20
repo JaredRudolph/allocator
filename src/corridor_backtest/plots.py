@@ -368,6 +368,135 @@ def plot_metrics_comparison(
     return list(axes)
 
 
+def plot_band_search_curves(
+    portfolio_data: list[dict],
+    color_map: dict[str, str] | None = None,
+    ax: plt.Axes | None = None,
+) -> plt.Axes:
+    """Plot band search score curves for all portfolios that ran a band search.
+
+    Each curve shows metric score vs band width with the optimal point marked.
+    A secondary y-axis shows rebalance count vs band width.
+
+    Args:
+        portfolio_data: List of dicts with 'name', 'band_search_results', 'config' keys.
+        color_map: Dict mapping strategy name to color. Built from PALETTE if None.
+        ax: Axes to plot on. Creates a new figure if None.
+
+    Returns:
+        The Axes with score curves drawn.
+    """
+    entries = [e for e in portfolio_data if e.get("band_search_results") is not None]
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(14, 4))
+        _apply_theme(fig, ax)
+
+    names = [e["name"] for e in portfolio_data]
+    if color_map is None:
+        color_map = _build_color_map(names)
+
+    for entry in entries:
+        name = entry["name"]
+        color = color_map[name]
+        df = entry["band_search_results"].sort_values("band")
+        metric = df["metric"].iloc[0]
+
+        ax.plot(df["band"], df["score"], color=color, linewidth=1.2, label=name)
+
+        best = df.loc[df["score"].idxmax()]
+        ax.scatter(
+            [best["band"]],
+            [best["score"]],
+            color=color,
+            s=50,
+            zorder=5,
+        )
+        ax.annotate(
+            f"{best['band']:.3f}",
+            xy=(best["band"], best["score"]),
+            xytext=(4, 4),
+            textcoords="offset points",
+            fontsize=6,
+            color=color,
+        )
+
+    ax.set_title(f"Band Search: {metric.capitalize()} vs Band Width")
+    ax.set_xlabel("Band Width")
+    ax.set_ylabel(metric.capitalize())
+    ax.legend(**OUTSIDE_LEGEND)
+
+    return ax
+
+
+def plot_weight_corridors(
+    entry: dict,
+    color_map: dict[str, str] | None = None,
+    axes: list[plt.Axes] | None = None,
+) -> list[plt.Axes]:
+    """Plot weight over time with shaded corridor bands for a single portfolio.
+
+    One subplot per asset. Shaded region shows the corridor band around target.
+    Vertical lines mark rebalance events.
+
+    Args:
+        entry: Single portfolio_data dict with 'results', 'rebalance_log', 'config'.
+        color_map: Dict mapping ticker to color. Built from asset_palette if None.
+        axes: List of Axes, one per ticker. Creates a new figure if None.
+
+    Returns:
+        List of Axes, one per ticker.
+    """
+    config = entry["config"]
+    results = entry["results"]
+    rebalance_log = entry["rebalance_log"]
+    tickers = config["tickers"]
+    targets = config["weights"]
+    band = config["rebalance"]["band"]
+    threshold_type = config["rebalance"]["threshold_type"]
+
+    asset_palette = [
+        "#f0c040", "#58a6ff", "#3fb950", "#ffa657",
+        "#d2a8ff", "#f78166", "#79c0ff", "#56d364",
+    ]
+    if color_map is None:
+        color_map = {t: asset_palette[i % len(asset_palette)] for i, t in enumerate(tickers)}
+
+    n = len(tickers)
+    if axes is None:
+        fig, ax_arr = plt.subplots(n, 1, figsize=(14, 2.2 * n), sharex=True)
+        _apply_theme(fig, ax_arr)
+        axes = list(ax_arr) if n > 1 else [ax_arr]
+
+    for ax, ticker in zip(axes, tickers):
+        color = color_map[ticker]
+        col = f"{ticker}_weight"
+        weights = results[col]
+        target = targets[ticker]
+
+        if threshold_type == "relative":
+            lo, hi = target * (1 - band), target * (1 + band)
+        else:
+            lo, hi = target - band, target + band
+
+        ax.plot(weights.index, weights.values, color=color, linewidth=0.8, label=ticker)
+        ax.axhline(target, color=color, linewidth=0.6, linestyle="--", alpha=0.6)
+        ax.fill_between(weights.index, lo, hi, color=color, alpha=0.10)
+        ax.axhline(lo, color=color, linewidth=0.4, linestyle=":", alpha=0.4)
+        ax.axhline(hi, color=color, linewidth=0.4, linestyle=":", alpha=0.4)
+
+        if not rebalance_log.empty:
+            for date in rebalance_log.index:
+                ax.axvline(date, color=TEXT_DIM, linewidth=0.4, alpha=0.4)
+
+        ax.set_ylabel(ticker, fontsize=8)
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.0%}"))
+
+    axes[0].set_title(f"Weight Corridors: {entry['name']}")
+
+    return axes
+
+
 def plot_avg_allocations(
     comparison: pd.DataFrame,
     ax: plt.Axes | None = None,
@@ -462,6 +591,82 @@ def plot_avg_allocations(
     )
 
     return ax
+
+
+def plot_corridor_dashboard(
+    portfolio_data: list[dict],
+    output_path: str | None = None,
+) -> Figure:
+    """Assemble the corridor methodology dashboard.
+
+    Layout:
+      Row 0: Band search score curves (full width) -- portfolios with band_search only
+      Rows 1+: Weight corridor subplots for each corridor/hybrid portfolio
+
+    Args:
+        portfolio_data: List of dicts with 'name', 'results', 'rebalance_log',
+            'band_search_results', 'config' keys.
+        output_path: If provided, saves the figure to this path.
+
+    Returns:
+        The assembled Figure.
+    """
+    _setup_rcparams()
+
+    corridor_modes = {"corridor", "hybrid"}
+    corridor_entries = [
+        e for e in portfolio_data
+        if e["config"]["rebalance"]["mode"] in corridor_modes
+    ]
+
+    ticker_counts = [len(e["config"]["tickers"]) for e in corridor_entries]
+    corridor_rows = sum(ticker_counts)
+
+    height_ratios = [2] + ticker_counts
+    total_rows = 1 + len(corridor_entries)
+
+    fig = plt.figure(figsize=(14, 3 + 2.2 * corridor_rows))
+    fig.patch.set_facecolor(BG)
+
+    gs = fig.add_gridspec(
+        total_rows,
+        1,
+        height_ratios=height_ratios,
+        hspace=0.50,
+        left=0.10,
+        right=0.88,
+        top=0.94,
+        bottom=0.04,
+    )
+
+    names = [e["name"] for e in portfolio_data]
+    color_map = _build_color_map(names)
+
+    # Row 0: band search curves
+    ax_band = fig.add_subplot(gs[0])
+    _apply_theme(fig, ax_band)
+    plot_band_search_curves(portfolio_data, color_map=color_map, ax=ax_band)
+
+    # Remaining rows: one weight-corridor block per corridor portfolio
+    row = 1
+    for entry in corridor_entries:
+        n = len(entry["config"]["tickers"])
+        gs_inner = gs[row].subgridspec(n, 1, hspace=0.15)
+        axes = [fig.add_subplot(gs_inner[i]) for i in range(n)]
+        _apply_theme(fig, axes)
+        plot_weight_corridors(entry, axes=axes)
+        row += 1
+
+    fig.text(
+        0.10, 0.997,
+        "Corridor Optimization Dashboard",
+        color=TEXT, fontsize=14, fontweight="bold", va="top",
+    )
+
+    if output_path is not None:
+        fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor=BG)
+
+    return fig
 
 
 def plot_dashboard(
