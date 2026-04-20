@@ -47,6 +47,12 @@ The default config runs six strategies organized around four themes:
 |---|---|---|
 | `leveraged_rp` | corridor + band search | UPRO/TMF/GLD -- 3x leveraged, corridor fires frequently, Calmar-optimized band |
 
+**Mixed leveraged / unleveraged:**
+
+| Portfolio | Mode | Description |
+|---|---|---|
+| `lev_unlev_mix` | corridor + band search | 50% leveraged (UPRO/TMF/TECL) + 50% unleveraged (SPY/XLK) -- corridor trims leveraged winners into the unleveraged side, Calmar-optimized band |
+
 **Conservative / regime-balanced:**
 
 | Portfolio | Mode | Description |
