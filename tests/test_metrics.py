@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 from corridor_backtest.metrics import (
     _total_contributions,
@@ -200,12 +199,20 @@ def test_summarize_keys_present():
     }
     summary = summarize(results, rebalance_log, config)
 
-    for key in ("cagr", "sharpe", "sortino", "calmar", "max_drawdown",
-                "rebalance_count", "final_value", "total_growth"):
+    for key in (
+        "cagr",
+        "sharpe",
+        "sortino",
+        "calmar",
+        "max_drawdown",
+        "rebalance_count",
+        "final_value",
+        "total_growth",
+    ):
         assert key in summary, f"missing key: {key}"
 
 
-def test_summarize_final_weight_columns():
+def test_summarize_avg_weight_columns():
     results = _make_results()
     config = {
         "name": "test_portfolio",
@@ -213,9 +220,9 @@ def test_summarize_final_weight_columns():
         "contribution": None,
     }
     summary = summarize(results, pd.DataFrame(), config)
-    assert "SPY_final_weight" in summary
-    assert "TLT_final_weight" in summary
-    assert abs(summary["SPY_final_weight"] - 0.60) < 1e-10
+    assert "SPY_avg_weight" in summary
+    assert "TLT_avg_weight" in summary
+    assert abs(summary["SPY_avg_weight"] - 0.60) < 1e-10
 
 
 def test_summarize_with_benchmark():
