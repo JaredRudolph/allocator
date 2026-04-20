@@ -9,7 +9,6 @@ from corridor_backtest.backtest import (
     run_backtest,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -138,20 +137,14 @@ def test_resolve_bounds_none_returns_long_only():
 
 def test_resolve_bounds_lazy_global():
     optimize_cfg = {"weight_bounds": {"min": 0.5, "max": 1.5}}
-    bounds = _resolve_bounds(
-        optimize_cfg, {"SPY": 0.60, "TLT": 0.40}, ["SPY", "TLT"]
-    )
+    bounds = _resolve_bounds(optimize_cfg, {"SPY": 0.60, "TLT": 0.40}, ["SPY", "TLT"])
     assert bounds[0] == pytest.approx((0.30, 0.90))
     assert bounds[1] == pytest.approx((0.20, 0.60))
 
 
 def test_resolve_bounds_per_asset():
-    optimize_cfg = {
-        "weight_bounds": {"SPY": [0.10, 0.70], "TLT": [0.05, 0.50]}
-    }
-    bounds = _resolve_bounds(
-        optimize_cfg, {"SPY": 0.60, "TLT": 0.40}, ["SPY", "TLT"]
-    )
+    optimize_cfg = {"weight_bounds": {"SPY": [0.10, 0.70], "TLT": [0.05, 0.50]}}
+    bounds = _resolve_bounds(optimize_cfg, {"SPY": 0.60, "TLT": 0.40}, ["SPY", "TLT"])
     assert bounds[0] == (0.10, 0.70)
     assert bounds[1] == (0.05, 0.50)
 
@@ -159,9 +152,7 @@ def test_resolve_bounds_per_asset():
 def test_resolve_bounds_per_asset_missing_ticker_raises():
     optimize_cfg = {"weight_bounds": {"SPY": [0.10, 0.70]}}
     with pytest.raises(KeyError, match="TLT"):
-        _resolve_bounds(
-            optimize_cfg, {"SPY": 0.60, "TLT": 0.40}, ["SPY", "TLT"]
-        )
+        _resolve_bounds(optimize_cfg, {"SPY": 0.60, "TLT": 0.40}, ["SPY", "TLT"])
 
 
 # ---------------------------------------------------------------------------
@@ -269,8 +260,7 @@ def test_run_backtest_contribution_grows_portfolio_value():
     results_no, _ = run_backtest(prices, cfg_no_contrib)
     results_yes, _ = run_backtest(prices, cfg_contrib)
     assert (
-        results_yes["portfolio_value"].iloc[-1]
-        > results_no["portfolio_value"].iloc[-1]
+        results_yes["portfolio_value"].iloc[-1] > results_no["portfolio_value"].iloc[-1]
     )
 
 
@@ -292,9 +282,5 @@ def test_run_backtest_corridor_post_weights_near_target():
     )
     _, log = run_backtest(prices, cfg)
     if len(log) > 0:
-        np.testing.assert_allclose(
-            log["SPY_post"].values, 0.60, atol=0.01
-        )
-        np.testing.assert_allclose(
-            log["TLT_post"].values, 0.40, atol=0.01
-        )
+        np.testing.assert_allclose(log["SPY_post"].values, 0.60, atol=0.01)
+        np.testing.assert_allclose(log["TLT_post"].values, 0.40, atol=0.01)
