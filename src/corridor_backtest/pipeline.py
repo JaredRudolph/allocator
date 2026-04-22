@@ -47,6 +47,13 @@ def run_pipeline(
             prices[benchmark] if benchmark and benchmark in prices.columns else None
         )
 
+        if "optimize" in config and config["rebalance"]["mode"] in ("corridor", "hybrid"):
+            logger.warning(
+                f"[{name}] optimizer + {config['rebalance']['mode']} mode causes "
+                f"rebalance cascades -- switching to periodic"
+            )
+            config = {**config, "rebalance": {**config["rebalance"], "mode": "periodic"}}
+
         band_search_results = None
         if "band_search" in config:
             logger.info(
