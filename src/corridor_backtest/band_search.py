@@ -35,7 +35,7 @@ def search_band(prices: pd.DataFrame, config: dict) -> tuple[float, pd.DataFrame
     band_cfg = config["band_search"]
     metric_name = band_cfg["metric"]
     lo, hi = band_cfg["band_range"]
-    steps = band_cfg["steps"]
+    steps = max(band_cfg["steps"], 30)
     risk_free_rate = config.get("risk_free_rate", 0.0)
 
     if metric_name not in _METRIC_FNS:
