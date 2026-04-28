@@ -69,9 +69,9 @@ portfolios = [
         },
     },
     # --- Group 2: leveraged risk parity ---
-    # 3x leveraged equity and bond ETFs with gold. High volatility means corridor
-    # bands trigger frequently -- the clearest demonstration of corridor behavior.
-    # Band search finds the width that best balances Calmar under high-drift conditions.
+    # 3x leveraged equity and bond ETFs with gold. Hybrid mode gates rebalancing to the
+    # quarterly schedule while tracking corridor breaches daily -- prevents chattering
+    # from band_edge + high-volatility drift. Band search optimizes the corridor width.
     {
         "name": "leveraged_rp",
         "tickers": ["UPRO", "TMF", "GLD"],
@@ -89,13 +89,14 @@ portfolios = [
         "rebalance": {
             "mode": "corridor",
             "threshold_type": "absolute",
-            "band": 0.08,
-            "rebalance_to": "target",
+            "band": 0.05,
+            "corridor": 0.15,
+            "rebalance_to": "band_edge",
             "schedule": "Q",
         },
         "band_search": {
             "metric": "calmar",
-            "band_range": [0.02, 0.20],
+            "band_range": [0.08, 0.25],
             "steps": 20,
         },
     },
@@ -126,10 +127,9 @@ portfolios = [
         },
     },
     # --- Group 3b: mixed leveraged / unleveraged ---
-    # 50% leveraged (UPRO/TMF/TECL) + 50% unleveraged (SPY/XLK). Corridor rebalancing
-    # systematically trims leveraged winners into the unleveraged side and buys back
-    # when leveraged positions drop. Absolute bands suit the high-vol leveraged
-    # positions.
+    # 50% leveraged (UPRO/TMF/TECL) + 50% unleveraged (SPY/XLK). Hybrid mode trims
+    # leveraged winners into the unleveraged side on schedule when drift has occurred,
+    # with band_edge minimizing trade size. Absolute bands suit the high-vol positions.
     {
         "name": "lev_unlev_mix",
         "tickers": ["UPRO", "TMF", "TECL", "SPY", "XLK"],
@@ -147,13 +147,140 @@ portfolios = [
         "rebalance": {
             "mode": "corridor",
             "threshold_type": "absolute",
-            "band": 0.07,
-            "rebalance_to": "target",
+            "band": 0.04,
+            "corridor": 0.12,
+            "rebalance_to": "band_edge",
             "schedule": "Q",
         },
         "band_search": {
             "metric": "calmar",
             "band_range": [0.02, 0.20],
+            "steps": 20,
+        },
+    },
+    # --- Group 5: leveraged ETF corridor strategies (band_edge) ---
+    # All four use band_edge rebalancing: trades only as far as needed to exit the
+    # breach, reducing turnover friction on high-volatility leveraged instruments.
+    #
+    # hfea: canonical Hedgefundie 55/45 UPRO/TMF. Baseline for the group.
+    {
+        "name": "hfea",
+        "tickers": ["UPRO", "TMF"],
+        "weights": {"UPRO": 0.55, "TMF": 0.45},
+        "benchmark": "SPY",
+        "start": "2015-01-01",
+        "end": None,
+        "initial_capital": 10_000,
+        "risk_free_rate": 0.0,
+        "contribution": {
+            "amount": 500,
+            "frequency": "M",
+            "method": "smart",
+        },
+        "rebalance": {
+            "mode": "corridor",
+            "threshold_type": "absolute",
+            "band": 0.05,
+            "corridor": 0.15,
+            "rebalance_to": "band_edge",
+            "schedule": "Q",
+        },
+        "band_search": {
+            "metric": "calmar",
+            "band_range": [0.08, 0.25],
+            "steps": 20,
+        },
+    },
+    # hfea_blended: HFEA variant splitting the bond leg equally between TYD (3x 7-10yr)
+    # and TMF (3x 20+yr). Blending duration reduces sensitivity to long-end rate moves
+    # while preserving the levered bond hedge. Compares directly against hfea above.
+    {
+        "name": "hfea_blended",
+        "tickers": ["UPRO", "TYD", "TMF"],
+        "weights": {"UPRO": 0.55, "TYD": 0.225, "TMF": 0.225},
+        "benchmark": "SPY",
+        "start": "2015-01-01",
+        "end": None,
+        "initial_capital": 10_000,
+        "risk_free_rate": 0.0,
+        "contribution": {
+            "amount": 500,
+            "frequency": "M",
+            "method": "smart",
+        },
+        "rebalance": {
+            "mode": "corridor",
+            "threshold_type": "absolute",
+            "band": 0.05,
+            "corridor": 0.15,
+            "rebalance_to": "band_edge",
+            "schedule": "Q",
+        },
+        "band_search": {
+            "metric": "calmar",
+            "band_range": [0.08, 0.25],
+            "steps": 20,
+        },
+    },
+    # lev_growth: QQQ-tilted leveraged portfolio. TQQQ provides more tech growth exposure
+    # than UPRO alone; TMF hedges the bond side. band_edge lets winners run further before
+    # trimming, preserving momentum in high-growth regimes.
+    {
+        "name": "lev_growth",
+        "tickers": ["TQQQ", "UPRO", "TMF"],
+        "weights": {"TQQQ": 0.40, "UPRO": 0.20, "TMF": 0.40},
+        "benchmark": "QQQ",
+        "start": "2015-01-01",
+        "end": None,
+        "initial_capital": 10_000,
+        "risk_free_rate": 0.0,
+        "contribution": {
+            "amount": 500,
+            "frequency": "M",
+            "method": "smart",
+        },
+        "rebalance": {
+            "mode": "corridor",
+            "threshold_type": "absolute",
+            "band": 0.06,
+            "corridor": 0.16,
+            "rebalance_to": "band_edge",
+            "schedule": "Q",
+        },
+        "band_search": {
+            "metric": "calmar",
+            "band_range": [0.08, 0.28],
+            "steps": 20,
+        },
+    },
+    # lev_sector: four-asset leveraged portfolio adding tech-sector concentration via TECL
+    # (3x XLK). Broader equity diversity across market cap and sector, all at 3x. Wider
+    # band search range accounts for higher multi-asset drift variance.
+    {
+        "name": "lev_sector",
+        "tickers": ["UPRO", "TQQQ", "TECL", "TMF"],
+        "weights": {"UPRO": 0.25, "TQQQ": 0.25, "TECL": 0.20, "TMF": 0.30},
+        "benchmark": "SPY",
+        "start": "2015-01-01",
+        "end": None,
+        "initial_capital": 10_000,
+        "risk_free_rate": 0.0,
+        "contribution": {
+            "amount": 500,
+            "frequency": "M",
+            "method": "smart",
+        },
+        "rebalance": {
+            "mode": "corridor",
+            "threshold_type": "absolute",
+            "band": 0.06,
+            "corridor": 0.16,
+            "rebalance_to": "band_edge",
+            "schedule": "Q",
+        },
+        "band_search": {
+            "metric": "calmar",
+            "band_range": [0.08, 0.28],
             "steps": 20,
         },
     },
