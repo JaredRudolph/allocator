@@ -97,6 +97,7 @@ def should_rebalance(
     """
     mode = rebalance_cfg["mode"]
     band = rebalance_cfg["band"]
+    trigger_band = rebalance_cfg.get("corridor", band)
     threshold_type = rebalance_cfg["threshold_type"]
     schedule = rebalance_cfg.get("schedule", "Q")
 
@@ -109,7 +110,7 @@ def should_rebalance(
         return False, ""
 
     if mode == "corridor":
-        if _breached(weights, targets, band, threshold_type):
+        if _breached(weights, targets, trigger_band, threshold_type):
             return True, "corridor"
         return False, ""
 
