@@ -452,6 +452,7 @@ def plot_weight_corridors(
     rebalance_log = entry["rebalance_log"]
     targets = config["weights"]
     band = config["rebalance"]["band"]
+    corridor = config["rebalance"].get("corridor", band)
     threshold_type = config["rebalance"]["threshold_type"]
 
     # derive tickers from weight columns so this works for any portfolio
@@ -502,16 +503,30 @@ def plot_weight_corridors(
         if threshold_type == "relative":
             lo = target_series * (1 - band)
             hi = target_series * (1 + band)
+            c_lo = target_series * (1 - corridor)
+            c_hi = target_series * (1 + corridor)
         else:
             lo = target_series - band
             hi = target_series + band
+            c_lo = target_series - corridor
+            c_hi = target_series + corridor
 
         ax.plot(weights.index, weights.values, color=color, linewidth=0.8, label=ticker)
         ax.plot(target_series.index, target_series.values, color=color,
                 linewidth=0.6, linestyle="--", alpha=0.6)
-        ax.fill_between(weights.index, lo, hi, color=color, alpha=0.10)
-        ax.plot(lo.index, lo.values, color=color, linewidth=0.4, linestyle=":", alpha=0.4)
-        ax.plot(hi.index, hi.values, color=color, linewidth=0.4, linestyle=":", alpha=0.4)
+        # inner rebalancing band: shaded fill + dashed boundary
+        ax.fill_between(weights.index, lo, hi, color=color, alpha=0.12)
+        ax.plot(lo.index, lo.values, color=color, linewidth=0.6, linestyle="--", alpha=0.5)
+        ax.plot(hi.index, hi.values, color=color, linewidth=0.6, linestyle="--", alpha=0.5)
+        if corridor != band:
+            # trigger zone: lightly shaded region between inner band and outer corridor
+            ax.fill_between(weights.index, c_lo, lo, color=color, alpha=0.05)
+            ax.fill_between(weights.index, hi, c_hi, color=color, alpha=0.05)
+            # outer corridor boundary
+            ax.plot(c_lo.index, c_lo.values, color=color, linewidth=0.8,
+                    linestyle=":", alpha=0.55)
+            ax.plot(c_hi.index, c_hi.values, color=color, linewidth=0.8,
+                    linestyle=":", alpha=0.55)
 
         if not rebalance_log.empty:
             for date in rebalance_log.index:
@@ -642,9 +657,13 @@ def plot_corridor_dashboard(
     Returns:
         The assembled Figure.
     """
-    _BAND_HEIGHT = 4.0       # inches for band search panel
-    _TABLE_ROW_HEIGHT = 0.55  # inches per row in summary table (header + data rows)
-    _SUBPLOT_HEIGHT = 3.5    # inches per asset subplot
+    _BAND_HEIGHT = 2.5       # inches for band search panel
+    _TABLE_ROW_HEIGHT = 0.45  # inches per row in summary table (header + data rows)
+    _SUBPLOT_HEIGHT = 2.5    # inches per asset subplot
+    _OUTER_HSPACE = 0.22     # vertical gap between outer rows as fraction of avg row height
+    _INNER_HSPACE = 0.08     # vertical gap between asset subplots within a section
+    _TOP = 0.95
+    _BOTTOM = 0.02
 
     _setup_rcparams()
 
@@ -660,12 +679,21 @@ def plot_corridor_dashboard(
 
     # table height scales with number of portfolio rows (+1 for header)
     table_height = (1 + n_portfolios) * _TABLE_ROW_HEIGHT
-    total_height = _BAND_HEIGHT + table_height + _SUBPLOT_HEIGHT * corridor_rows
+    total_rows = 2 + len(corridor_entries)
+    n_outer_gaps = total_rows - 1
+
+    # Inflate figure height so hspace gaps don't compress subplot content below
+    # _SUBPLOT_HEIGHT. Without this, outer hspace eats into each row's allocation.
+    content_height = _BAND_HEIGHT + table_height + _SUBPLOT_HEIGHT * corridor_rows
+    total_height = (
+        content_height
+        * (1.0 + n_outer_gaps * _OUTER_HSPACE / total_rows)
+        / (_TOP - _BOTTOM)
+    )
 
     band_ratio = _BAND_HEIGHT / _SUBPLOT_HEIGHT
     table_ratio = table_height / _SUBPLOT_HEIGHT
     height_ratios = [band_ratio, table_ratio] + ticker_counts
-    total_rows = 2 + len(corridor_entries)
 
     fig = plt.figure(figsize=(14, total_height))
     fig.patch.set_facecolor(BG)
@@ -674,11 +702,11 @@ def plot_corridor_dashboard(
         total_rows,
         1,
         height_ratios=height_ratios,
-        hspace=0.50,
+        hspace=_OUTER_HSPACE,
         left=0.10,
         right=0.88,
-        top=0.94,
-        bottom=0.04,
+        top=_TOP,
+        bottom=_BOTTOM,
     )
 
     names = [e["name"] for e in portfolio_data]
@@ -730,7 +758,7 @@ def plot_corridor_dashboard(
     # Rows 2+: one weight-corridor block per corridor portfolio
     for i, entry in enumerate(corridor_entries):
         n = len(entry["config"]["tickers"])
-        gs_inner = gs[2 + i].subgridspec(n, 1, hspace=0.15)
+        gs_inner = gs[2 + i].subgridspec(n, 1, hspace=_INNER_HSPACE)
         axes = [fig.add_subplot(gs_inner[j]) for j in range(n)]
         _apply_theme(fig, axes)
         plot_weight_corridors(entry, axes=axes)
