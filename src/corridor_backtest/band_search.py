@@ -47,8 +47,11 @@ def search_band(prices: pd.DataFrame, config: dict) -> tuple[float, pd.DataFrame
     candidates = np.linspace(lo, hi, steps)
     records = []
 
-    for band in candidates:
-        candidate_cfg = {**config, "rebalance": {**config["rebalance"], "band": band}}
+    two_band = "corridor" in config["rebalance"]
+    search_key = "corridor" if two_band else "band"
+
+    for val in candidates:
+        candidate_cfg = {**config, "rebalance": {**config["rebalance"], search_key: val}}
         results, _ = run_backtest(prices, candidate_cfg)
         pv = results["portfolio_value"]
 
@@ -57,7 +60,7 @@ def search_band(prices: pd.DataFrame, config: dict) -> tuple[float, pd.DataFrame
         else:
             score = metric_fn(pv)
 
-        records.append({"band": band, "metric": metric_name, "score": score})
+        records.append({"band": val, "metric": metric_name, "score": score})
 
     search_results = (
         pd.DataFrame(records)
