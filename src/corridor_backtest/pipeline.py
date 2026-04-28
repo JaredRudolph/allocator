@@ -47,13 +47,6 @@ def run_pipeline(
             prices[benchmark] if benchmark and benchmark in prices.columns else None
         )
 
-        if "optimize" in config and config["rebalance"]["mode"] in ("corridor", "hybrid"):
-            logger.warning(
-                f"[{name}] optimizer + {config['rebalance']['mode']} mode causes "
-                f"rebalance cascades -- switching to periodic"
-            )
-            config = {**config, "rebalance": {**config["rebalance"], "mode": "periodic"}}
-
         band_search_results = None
         if "band_search" in config:
             logger.info(
@@ -64,7 +57,8 @@ def run_pipeline(
                 f"[{name}] Best band: {best_band:.4f} "
                 f"(score: {band_search_results.iloc[0]['score']:.4f})"
             )
-            config = {**config, "rebalance": {**config["rebalance"], "band": best_band}}
+            search_key = "corridor" if "corridor" in config["rebalance"] else "band"
+            config = {**config, "rebalance": {**config["rebalance"], search_key: best_band}}
 
         results, rebalance_log = run_backtest(portfolio_prices, config)
 
