@@ -372,61 +372,138 @@ def plot_band_search_curves(
     portfolio_data: list[dict],
     color_map: dict[str, str] | None = None,
     ax: plt.Axes | None = None,
-) -> plt.Axes:
-    """Plot band search score curves for all portfolios that ran a band search.
+    fig: Figure | None = None,
+    gs_slot=None,
+) -> list[plt.Axes]:
+    """Plot band search results for all portfolios that ran a band search.
 
-    Each curve shows metric score vs band width with the optimal point marked.
-    A secondary y-axis shows rebalance count vs band width.
+    1D results (single parameter searched) are drawn as score vs band width line
+    charts, all combined in one subplot.  2D results (band + corridor both searched)
+    are drawn as individual heatmaps with the optimal point marked.
 
     Args:
         portfolio_data: List of dicts with 'name', 'band_search_results', 'config' keys.
         color_map: Dict mapping strategy name to color. Built from PALETTE if None.
-        ax: Axes to plot on. Creates a new figure if None.
+        ax: Single Axes to use when all results are 1D. Creates figure if None.
+        fig: Figure to add subplots to (required for 2D heatmap layout).
+        gs_slot: GridSpec slot for the band search panel (required for 2D layout).
 
     Returns:
-        The Axes with score curves drawn.
+        List of Axes created.
     """
     entries = [e for e in portfolio_data if e.get("band_search_results") is not None]
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(14, 4))
-        _apply_theme(fig, ax)
+    if not entries:
+        return [ax] if ax is not None else []
 
     names = [e["name"] for e in portfolio_data]
     if color_map is None:
         color_map = _build_color_map(names)
 
-    for entry in entries:
+    entries_1d = [e for e in entries if "corridor" not in e["band_search_results"].columns]
+    entries_2d = [e for e in entries if "corridor" in e["band_search_results"].columns]
+
+    if not entries_2d or fig is None or gs_slot is None:
+        # fallback: single axis 1D line chart
+        if ax is None:
+            _fig, ax = plt.subplots(figsize=(14, 4))
+            _apply_theme(_fig, ax)
+        for entry in entries_1d or entries:
+            name = entry["name"]
+            color = color_map[name]
+            df = entry["band_search_results"].sort_values("band")
+            metric = df["metric"].iloc[0]
+            ax.plot(df["band"], df["score"], color=color, linewidth=1.2, label=name)
+            best = df.loc[df["score"].idxmax()]
+            ax.scatter([best["band"]], [best["score"]], color=color, s=50, zorder=5)
+            ax.annotate(
+                f"{best['band']:.3f}",
+                xy=(best["band"], best["score"]),
+                xytext=(4, 4),
+                textcoords="offset points",
+                fontsize=6,
+                color=color,
+            )
+        ax.set_title(f"Band Search: {metric.capitalize()} vs Band Width")
+        ax.set_xlabel("Band Width")
+        ax.set_ylabel(metric.capitalize())
+        ax.legend(**OUTSIDE_LEGEND)
+        return [ax]
+
+    # mixed or all-2D: build a subgridspec within the band search slot
+    n_1d = 1 if entries_1d else 0
+    n_2d = len(entries_2d)
+    n_cols = n_1d + n_2d
+    width_ratios = ([2] if entries_1d else []) + [1] * n_2d
+    gs_inner = gs_slot.subgridspec(1, n_cols, wspace=0.45, width_ratios=width_ratios)
+
+    axes = []
+    col = 0
+
+    if entries_1d:
+        ax_1d = fig.add_subplot(gs_inner[0, col])
+        _apply_theme(fig, ax_1d)
+        metric_1d = entries_1d[0]["band_search_results"]["metric"].iloc[0]
+        for entry in entries_1d:
+            name = entry["name"]
+            color = color_map[name]
+            df = entry["band_search_results"].sort_values("band")
+            ax_1d.plot(df["band"], df["score"], color=color, linewidth=1.2, label=name)
+            best = df.loc[df["score"].idxmax()]
+            ax_1d.scatter([best["band"]], [best["score"]], color=color, s=40, zorder=5)
+            ax_1d.annotate(
+                f"{best['band']:.3f}",
+                xy=(best["band"], best["score"]),
+                xytext=(4, 4),
+                textcoords="offset points",
+                fontsize=6,
+                color=color,
+            )
+        ax_1d.set_title(
+            f"Band Search: {metric_1d.capitalize()} vs Band Width",
+            color=TEXT, fontsize=9,
+        )
+        ax_1d.set_xlabel("Band Width", fontsize=8)
+        ax_1d.set_ylabel(metric_1d.capitalize(), fontsize=8)
+        ax_1d.legend(**OUTSIDE_LEGEND)
+        axes.append(ax_1d)
+        col += 1
+
+    for entry in entries_2d:
+        ax_hm = fig.add_subplot(gs_inner[0, col])
+        _apply_theme(fig, ax_hm)
+
         name = entry["name"]
-        color = color_map[name]
-        df = entry["band_search_results"].sort_values("band")
+        df = entry["band_search_results"]
         metric = df["metric"].iloc[0]
 
-        ax.plot(df["band"], df["score"], color=color, linewidth=1.2, label=name)
+        pivot = df.pivot_table(index="corridor", columns="band", values="score")
+        ax_hm.pcolormesh(
+            pivot.columns, pivot.index, pivot.values,
+            cmap="plasma", shading="auto",
+        )
 
         best = df.loc[df["score"].idxmax()]
-        ax.scatter(
-            [best["band"]],
-            [best["score"]],
-            color=color,
-            s=50,
-            zorder=5,
+        ax_hm.scatter(
+            [best["band"]], [best["corridor"]],
+            color="white", s=50, marker="*", zorder=5, linewidths=0.5,
         )
-        ax.annotate(
-            f"{best['band']:.3f}",
-            xy=(best["band"], best["score"]),
+        ax_hm.annotate(
+            f"b={best['band']:.2f}\nc={best['corridor']:.2f}",
+            xy=(best["band"], best["corridor"]),
             xytext=(4, 4),
             textcoords="offset points",
-            fontsize=6,
-            color=color,
+            fontsize=5,
+            color="white",
         )
 
-    ax.set_title(f"Band Search: {metric.capitalize()} vs Band Width")
-    ax.set_xlabel("Band Width")
-    ax.set_ylabel(metric.capitalize())
-    ax.legend(**OUTSIDE_LEGEND)
+        ax_hm.set_title(name, color=TEXT, fontsize=8)
+        ax_hm.set_xlabel("Inner Band", fontsize=7, color=TEXT_DIM)
+        ax_hm.set_ylabel("Corridor", fontsize=7, color=TEXT_DIM)
+        ax_hm.tick_params(labelsize=6)
+        axes.append(ax_hm)
+        col += 1
 
-    return ax
+    return axes
 
 
 def plot_weight_corridors(
@@ -712,10 +789,8 @@ def plot_corridor_dashboard(
     names = [e["name"] for e in portfolio_data]
     color_map = _build_color_map(names)
 
-    # Row 0: band search curves
-    ax_band = fig.add_subplot(gs[0])
-    _apply_theme(fig, ax_band)
-    plot_band_search_curves(portfolio_data, color_map=color_map, ax=ax_band)
+    # Row 0: band search panel (1D line charts + 2D heatmaps)
+    plot_band_search_curves(portfolio_data, color_map=color_map, fig=fig, gs_slot=gs[0])
 
     # Row 1: summary stats table derived from results
     ax_table = fig.add_subplot(gs[1])
