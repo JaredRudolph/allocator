@@ -39,8 +39,32 @@ def _base_config(metric="sharpe", steps=5):
     }
 
 
+def _two_band_config(metric="calmar", steps=4):
+    return {
+        "name": "test_2d",
+        "tickers": ["SPY", "TLT"],
+        "weights": {"SPY": 0.60, "TLT": 0.40},
+        "initial_capital": 10000,
+        "contribution": None,
+        "rebalance": {
+            "mode": "corridor",
+            "threshold_type": "absolute",
+            "rebalance_to": "band_edge",
+            "band": 0.03,
+            "corridor": 0.10,
+            "schedule": "Q",
+        },
+        "band_search": {
+            "metric": metric,
+            "band_range": [0.02, 0.06],
+            "corridor_range": [0.08, 0.18],
+            "steps": steps,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
-# Return structure
+# 1D search -- return structure
 # ---------------------------------------------------------------------------
 
 
@@ -50,10 +74,17 @@ def test_search_band_returns_tuple():
     assert isinstance(result, tuple) and len(result) == 2
 
 
-def test_search_band_best_band_is_float():
+def test_search_band_best_params_is_dict():
     prices = _make_prices()
-    best_band, _ = search_band(prices, _base_config())
-    assert isinstance(best_band, float)
+    best_params, _ = search_band(prices, _base_config())
+    assert isinstance(best_params, dict)
+    assert "band" in best_params
+
+
+def test_search_band_best_params_value_is_float():
+    prices = _make_prices()
+    best_params, _ = search_band(prices, _base_config())
+    assert isinstance(best_params["band"], float)
 
 
 def test_search_band_results_columns():
@@ -77,40 +108,102 @@ def test_search_band_results_sorted_descending():
 
 
 # ---------------------------------------------------------------------------
-# best_band is within the searched range
+# 1D search -- best_params within range and consistent with top row
 # ---------------------------------------------------------------------------
 
 
-def test_search_band_best_band_within_range():
+def test_search_band_best_params_within_range():
     prices = _make_prices()
     cfg = _base_config()
     lo, hi = cfg["band_search"]["band_range"]
-    best_band, _ = search_band(prices, cfg)
-    assert lo - 1e-9 <= best_band <= hi + 1e-9
+    best_params, _ = search_band(prices, cfg)
+    assert lo - 1e-9 <= best_params["band"] <= hi + 1e-9
 
 
-# ---------------------------------------------------------------------------
-# best_band matches the top row of search_results
-# ---------------------------------------------------------------------------
-
-
-def test_search_band_best_band_matches_top_row():
+def test_search_band_best_params_matches_top_row():
     prices = _make_prices()
-    best_band, results = search_band(prices, _base_config())
-    assert best_band == pytest.approx(results.iloc[0]["band"])
+    best_params, results = search_band(prices, _base_config())
+    assert best_params["band"] == pytest.approx(results.iloc[0]["band"])
 
 
 # ---------------------------------------------------------------------------
-# All supported metrics run without error
+# 1D search -- corridor key is searched when present in rebalance config
+# ---------------------------------------------------------------------------
+
+
+def test_search_band_searches_corridor_when_two_band():
+    prices = _make_prices()
+    cfg = _base_config()
+    cfg["rebalance"]["corridor"] = 0.12
+    best_params, _ = search_band(prices, cfg)
+    assert "corridor" in best_params
+    assert "band" not in best_params
+
+
+# ---------------------------------------------------------------------------
+# 1D search -- all metrics run without error
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("metric", ["sharpe", "cagr", "calmar", "sortino"])
 def test_search_band_all_metrics(metric):
     prices = _make_prices()
-    best_band, results = search_band(prices, _base_config(metric=metric))
-    assert np.isfinite(best_band)
+    best_params, results = search_band(prices, _base_config(metric=metric))
+    assert np.isfinite(list(best_params.values())[0])
     assert results["metric"].iloc[0] == metric
+
+
+# ---------------------------------------------------------------------------
+# 2D search -- return structure
+# ---------------------------------------------------------------------------
+
+
+def test_search_band_2d_returns_tuple():
+    prices = _make_prices()
+    result = search_band(prices, _two_band_config())
+    assert isinstance(result, tuple) and len(result) == 2
+
+
+def test_search_band_2d_best_params_has_both_keys():
+    prices = _make_prices()
+    best_params, _ = search_band(prices, _two_band_config())
+    assert "band" in best_params and "corridor" in best_params
+
+
+def test_search_band_2d_results_has_corridor_column():
+    prices = _make_prices()
+    _, results = search_band(prices, _two_band_config())
+    assert "corridor" in results.columns
+
+
+def test_search_band_2d_corridor_always_greater_than_band():
+    prices = _make_prices()
+    _, results = search_band(prices, _two_band_config())
+    assert (results["corridor"] > results["band"]).all()
+
+
+def test_search_band_2d_best_params_within_range():
+    prices = _make_prices()
+    cfg = _two_band_config()
+    band_lo, band_hi = cfg["band_search"]["band_range"]
+    corr_lo, corr_hi = cfg["band_search"]["corridor_range"]
+    best_params, _ = search_band(prices, cfg)
+    assert band_lo - 1e-9 <= best_params["band"] <= band_hi + 1e-9
+    assert corr_lo - 1e-9 <= best_params["corridor"] <= corr_hi + 1e-9
+
+
+def test_search_band_2d_best_params_matches_top_row():
+    prices = _make_prices()
+    best_params, results = search_band(prices, _two_band_config())
+    assert best_params["band"] == pytest.approx(results.iloc[0]["band"])
+    assert best_params["corridor"] == pytest.approx(results.iloc[0]["corridor"])
+
+
+def test_search_band_2d_results_sorted_descending():
+    prices = _make_prices()
+    _, results = search_band(prices, _two_band_config())
+    scores = results["score"].values
+    assert np.all(scores[:-1] >= scores[1:])
 
 
 # ---------------------------------------------------------------------------
