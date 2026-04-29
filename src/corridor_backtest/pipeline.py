@@ -52,13 +52,13 @@ def run_pipeline(
             logger.info(
                 f"[{name}] Running band search ({config['band_search']['metric']})..."
             )
-            best_band, band_search_results = search_band(portfolio_prices, config)
+            best_params, band_search_results = search_band(portfolio_prices, config)
+            params_str = ", ".join(f"{k}={v:.4f}" for k, v in best_params.items())
             logger.info(
-                f"[{name}] Best band: {best_band:.4f} "
+                f"[{name}] Best params: {params_str} "
                 f"(score: {band_search_results.iloc[0]['score']:.4f})"
             )
-            search_key = "corridor" if "corridor" in config["rebalance"] else "band"
-            config = {**config, "rebalance": {**config["rebalance"], search_key: best_band}}
+            config = {**config, "rebalance": {**config["rebalance"], **best_params}}
 
         results, rebalance_log = run_backtest(portfolio_prices, config)
 
