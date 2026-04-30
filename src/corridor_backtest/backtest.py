@@ -2,7 +2,12 @@ import numpy as np
 import pandas as pd
 
 from corridor_backtest.optimize import compute_weights
-from corridor_backtest.rebalance import _breached, _on_schedule, apply_rebalance, should_rebalance
+from corridor_backtest.rebalance import (
+    _breached,
+    _on_schedule,
+    apply_rebalance,
+    should_rebalance,
+)
 
 
 def _apply_contribution(
