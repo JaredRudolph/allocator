@@ -42,8 +42,8 @@ def main() -> None:
         )
         benchmark = prices[benchmark_ticker]
 
-    dashboard_path = str(PLOTS_DIR / "dashboard.png")
-    assets_path = str(ASSETS_DIR / "dashboard.png")
+    dashboard_path = str(PLOTS_DIR / "summary_dashboard.png")
+    assets_path = str(ASSETS_DIR / "summary_dashboard.png")
     plot_dashboard(
         comparison,
         portfolio_data,
@@ -58,11 +58,11 @@ def main() -> None:
     )
     logger.info(f"Dashboard saved to {dashboard_path} and {assets_path}")
 
-    corridor_path = str(PLOTS_DIR / "summary_dashboard.png")
-    corridor_assets_path = str(ASSETS_DIR / "summary_dashboard.png")
+    corridor_path = str(PLOTS_DIR / "corridor_dashboard.png")
+    corridor_assets_path = str(ASSETS_DIR / "corridor_dashboard.png")
     plot_corridor_dashboard(portfolio_data, output_path=corridor_path)
     plot_corridor_dashboard(portfolio_data, output_path=corridor_assets_path)
-    logger.info(f"Summary dashboard saved to {corridor_path} and {corridor_assets_path}")
+    logger.info(f"Corridor dashboard saved to {corridor_path} and {corridor_assets_path}")
 
     logger.info(f"Results saved to {OUTPUT_DIR}")
 
