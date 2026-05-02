@@ -663,7 +663,32 @@ def plot_weight_corridors(
             labelcolor=TEXT,
         )
 
-    axes[0].set_title(f"Weight Corridors: {entry['name']}")
+    reb = config["rebalance"]
+    band_str = f"band {reb['band']:.0%}"
+    outer = reb.get("corridor")
+    if outer is not None:
+        band_str += f" / outer {outer:.0%}"
+    parts = [reb["mode"], reb["threshold_type"], band_str, f"to {reb.get('rebalance_to', 'target')}"]
+    if reb["mode"] == "hybrid" and reb.get("schedule"):
+        parts.append(reb["schedule"])
+    config_desc = "  |  ".join(parts)
+
+    axes[0].set_title(
+        f"Weight Corridors: {entry['name']}",
+        fontsize=9,
+        color=TEXT,
+        pad=16,
+    )
+    axes[0].text(
+        0.5,
+        1.01,
+        config_desc,
+        transform=axes[0].transAxes,
+        fontsize=7,
+        color=TEXT_DIM,
+        ha="center",
+        va="bottom",
+    )
 
     return axes
 
@@ -772,8 +797,7 @@ def plot_corridor_dashboard(
 
     Layout:
       Row 0: Band search score curves (full width)
-      Row 1: Summary stats table
-      Rows 2+: Weight corridor subplots for each corridor/hybrid portfolio
+      Rows 1+: Weight corridor subplots for each corridor/hybrid portfolio
 
     Args:
         portfolio_data: List of dicts with 'name', 'results', 'rebalance_log',
@@ -784,7 +808,6 @@ def plot_corridor_dashboard(
         The assembled Figure.
     """
     _BAND_HEIGHT = 2.5  # inches for band search panel
-    _TABLE_ROW_HEIGHT = 0.45  # inches per row in summary table (header + data rows)
     _SUBPLOT_HEIGHT = 2.5  # inches per asset subplot
     _OUTER_HSPACE = (
         0.22  # vertical gap between outer rows as fraction of avg row height
@@ -802,16 +825,13 @@ def plot_corridor_dashboard(
 
     ticker_counts = [len(e["config"]["tickers"]) for e in corridor_entries]
     corridor_rows = sum(ticker_counts)
-    n_portfolios = len(portfolio_data)
 
-    # table height scales with number of portfolio rows (+1 for header)
-    table_height = (1 + n_portfolios) * _TABLE_ROW_HEIGHT
-    total_rows = 2 + len(corridor_entries)
+    total_rows = 1 + len(corridor_entries)
     n_outer_gaps = total_rows - 1
 
     # Inflate figure height so hspace gaps don't compress subplot content below
     # _SUBPLOT_HEIGHT. Without this, outer hspace eats into each row's allocation.
-    content_height = _BAND_HEIGHT + table_height + _SUBPLOT_HEIGHT * corridor_rows
+    content_height = _BAND_HEIGHT + _SUBPLOT_HEIGHT * corridor_rows
     total_height = (
         content_height
         * (1.0 + n_outer_gaps * _OUTER_HSPACE / total_rows)
@@ -819,8 +839,7 @@ def plot_corridor_dashboard(
     )
 
     band_ratio = _BAND_HEIGHT / _SUBPLOT_HEIGHT
-    table_ratio = table_height / _SUBPLOT_HEIGHT
-    height_ratios = [band_ratio, table_ratio] + ticker_counts
+    height_ratios = [band_ratio] + ticker_counts
 
     fig = plt.figure(figsize=(14, total_height))
     fig.patch.set_facecolor(BG)
@@ -842,58 +861,10 @@ def plot_corridor_dashboard(
     # Row 0: band search panel (1D line charts + 2D heatmaps)
     plot_band_search_curves(portfolio_data, color_map=color_map, fig=fig, gs_slot=gs[0])
 
-    # Row 1: summary stats table derived from results
-    ax_table = fig.add_subplot(gs[1])
-    _apply_theme(fig, ax_table)
-    ax_table.set_axis_off()
-
-    col_labels = ["CAGR", "Sharpe", "Max DD", "Ann. Vol"]
-    row_labels, cell_text = [], []
-    for entry in portfolio_data:
-        pv = entry["results"]["portfolio_value"]
-        daily_ret = pv.pct_change().dropna()
-        years = (pv.index[-1] - pv.index[0]).days / 365.25
-        p_cagr = (pv.iloc[-1] / pv.iloc[0]) ** (1 / years) - 1
-        std = daily_ret.std()
-        p_sharpe = (
-            float(daily_ret.mean() / std * np.sqrt(252)) if std > 0 else float("nan")
-        )
-        peak = pv.cummax()
-        p_maxdd = float(((pv - peak) / peak).min())
-        ann_vol = std * np.sqrt(252)
-        row_labels.append(entry["name"])
-        cell_text.append(
-            [
-                f"{p_cagr:.1%}",
-                f"{p_sharpe:.2f}",
-                f"{p_maxdd:.1%}",
-                f"{ann_vol:.1%}",
-            ]
-        )
-
-    tbl = ax_table.table(
-        cellText=cell_text,
-        rowLabels=row_labels,
-        colLabels=col_labels,
-        loc="center",
-        cellLoc="center",
-    )
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(10)
-    tbl.auto_set_column_width(list(range(len(col_labels))))
-    row_scale = max(2.5, 10.0 / max(n_portfolios, 1))
-    tbl.scale(1, row_scale)
-    for (r, c), cell in tbl.get_celld().items():
-        cell.set_facecolor(AXES_BG if r > 0 else BG)
-        cell.set_edgecolor(TEXT_DIM)
-        cell.set_linewidth(0.8)
-        cell.set_text_props(color=TEXT if r > 0 else TEXT_DIM)
-    ax_table.set_title("Strategy Summary", color=TEXT, fontsize=10, pad=6)
-
-    # Rows 2+: one weight-corridor block per corridor portfolio
+    # Rows 1+: one weight-corridor block per corridor portfolio
     for i, entry in enumerate(corridor_entries):
         n = len(entry["config"]["tickers"])
-        gs_inner = gs[2 + i].subgridspec(n, 1, hspace=_INNER_HSPACE)
+        gs_inner = gs[1 + i].subgridspec(n, 1, hspace=_INNER_HSPACE)
         axes = [fig.add_subplot(gs_inner[j]) for j in range(n)]
         _apply_theme(fig, axes)
         plot_weight_corridors(entry, axes=axes)
