@@ -26,6 +26,38 @@ corridor-backtest simulates realistic portfolio behavior over historical price d
 - Equity dashboard: equity curves, drawdown, rolling Sharpe, metrics comparison, avg realized allocations
 - Summary dashboard: 2D band search heatmaps with optimal parameters annotated, per-asset weight corridors showing inner band and outer corridor, rebalance event markers
 
+## Key Concepts
+
+**Corridor rebalancing** -- rebalance only when an asset weight drifts outside a defined boundary, rather than on a fixed calendar schedule. A quiet year may see no trades; a volatile year triggers several. The width of that boundary is the core tuning parameter this project optimizes.
+
+**Band (inner band)** -- the rebalancing destination half-width. When `rebalance_to: band_edge`, trades stop at the inner band edge rather than overshooting all the way back to target. This is the range the portfolio is kept within after each rebalance event.
+
+**Corridor (outer band)** -- the trigger boundary half-width. A rebalance fires when any weight breaches this wider limit. Separating the trigger (corridor) from the destination (band) prevents chattering: after moving to the band edge, the weight has room to drift again before triggering another rebalance.
+
+**Absolute vs relative bands** -- absolute bands are fixed percentage-point distances from target (`target +/- band`). A 5% absolute band on a 25% target triggers at weights below 20% or above 30%, regardless of how large the target is. Relative bands scale with target weight (`target * (1 +/- band)`): a 10% relative band on a 25% target triggers at 22.5% or 27.5%, and on a 40% target triggers at 36% or 44%. Relative bands apply proportionally tighter constraints to smaller positions.
+
+**Rebalance to target** -- restore all weights to their exact target allocations on each rebalance event. Higher turnover; the portfolio fully resets every time.
+
+**Rebalance to band_edge** -- move only the breached asset to the nearest inner band edge, then renormalize all weights to sum to 1. Executes the minimum trade needed to exit the breach while leaving in-band assets untouched.
+
+**Hybrid mode** -- corridor conditions are evaluated every trading day, but rebalancing only executes on a calendar schedule (monthly or quarterly) if a breach has occurred since the last rebalance. This gates corridor responsiveness behind a schedule, reducing turnover on high-volatility assets that would otherwise trigger constantly.
+
+**Band search** -- a parameter sweep that runs a full backtest for each candidate band width and scores it by a chosen metric. The best-scoring configuration is reported. A 2D search sweeps `(band, corridor)` pairs jointly across all valid combinations where `corridor > band`.
+
+**Smart contribution** -- periodic cash is directed entirely to the most underweight asset rather than split pro-rata across all holdings. Uses the contribution itself as a low-friction rebalancing tool without incurring sell-side transaction costs.
+
+## Performance Metrics
+
+**CAGR** (Compound Annual Growth Rate) -- total return annualized over the backtest period. `(end_value / start_value) ^ (1 / years) - 1`.
+
+**Sharpe ratio** -- annualized excess return above the risk-free rate, divided by annualized return volatility. Measures reward per unit of total risk; penalizes both upside and downside volatility equally.
+
+**Calmar ratio** -- CAGR divided by maximum drawdown. Rewards strategies that achieve returns without large peak-to-trough losses.
+
+**Sortino ratio** -- like Sharpe, but uses downside deviation (volatility of negative returns only) in the denominator. Upside volatility is not penalized.
+
+**Maximum drawdown** -- the largest peak-to-trough decline over the full backtest period, expressed as a percentage of the peak value.
+
 ## Rebalancing Modes
 
 | Mode | Behavior |
@@ -53,8 +85,6 @@ The 2D band search finds the optimal `(band, corridor)` pair jointly, scored by 
 The summary dashboard has three sections:
 
 **Band search panel (top):** 1D portfolios show score vs band width curves. 2D portfolios show a `plasma` heatmap of score across the `(inner band, corridor)` search space, with the optimal pair marked by a white star.
-
-**Strategy summary table:** CAGR, Sharpe, max drawdown, and annualized volatility for each portfolio side by side.
 
 **Weight corridor plots:** One block per corridor/hybrid portfolio, one subplot per asset. Each subplot shows:
 - Asset weight over time (solid line)
