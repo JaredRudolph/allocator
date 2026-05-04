@@ -4,7 +4,7 @@ from loguru import logger
 from corridor_backtest.backtest import run_backtest
 from corridor_backtest.band_search import search_band
 from corridor_backtest.data import fetch_prices
-from corridor_backtest.metrics import summarize
+from corridor_backtest.metrics import cagr, max_drawdown, sharpe, sortino, summarize
 
 
 def run_pipeline(
@@ -47,12 +47,27 @@ def run_pipeline(
             prices[benchmark] if benchmark and benchmark in prices.columns else None
         )
 
+        train_end_date = None
         band_search_results = None
         if "band_search" in config:
+            band_cfg = config["band_search"]
+            train_frac = band_cfg.get("train_frac")
+            search_prices = portfolio_prices
+            if train_frac is not None:
+                n = len(portfolio_prices)
+                train_n = max(int(n * train_frac), 1)
+                train_end_date = portfolio_prices.index[train_n - 1]
+                search_prices = portfolio_prices.iloc[:train_n]
+                logger.info(
+                    f"[{name}] Band search train window: "
+                    f"{search_prices.index[0].date()} to {train_end_date.date()} "
+                    f"({train_frac:.0%} of data)"
+                )
+
             logger.info(
-                f"[{name}] Running band search ({config['band_search']['metric']})..."
+                f"[{name}] Running band search ({band_cfg['metric']})..."
             )
-            best_params, band_search_results = search_band(portfolio_prices, config)
+            best_params, band_search_results = search_band(search_prices, config)
             params_str = ", ".join(f"{k}={v:.4f}" for k, v in best_params.items())
             logger.info(
                 f"[{name}] Best params: {params_str} "
@@ -63,6 +78,19 @@ def run_pipeline(
         results, rebalance_log = run_backtest(portfolio_prices, config)
 
         summary = summarize(results, rebalance_log, config, benchmark_prices)
+
+        if train_end_date is not None:
+            pv = results["portfolio_value"]
+            rfr = config.get("risk_free_rate", 0.0)
+            train_pv = pv[pv.index <= train_end_date]
+            test_pv = pv[pv.index > train_end_date]
+            summary["train_cagr"] = cagr(train_pv) if len(train_pv) > 1 else float("nan")
+            summary["train_sharpe"] = sharpe(train_pv, rfr) if len(train_pv) > 1 else float("nan")
+            summary["train_max_drawdown"] = max_drawdown(train_pv) if len(train_pv) > 1 else float("nan")
+            summary["test_cagr"] = cagr(test_pv) if len(test_pv) > 1 else float("nan")
+            summary["test_sharpe"] = sharpe(test_pv, rfr) if len(test_pv) > 1 else float("nan")
+            summary["test_max_drawdown"] = max_drawdown(test_pv) if len(test_pv) > 1 else float("nan")
+
         summaries.append(summary)
         portfolio_data.append(
             {
@@ -70,6 +98,7 @@ def run_pipeline(
                 "results": results,
                 "rebalance_log": rebalance_log,
                 "band_search_results": band_search_results,
+                "train_end_date": train_end_date,
                 "config": config,
             }
         )
