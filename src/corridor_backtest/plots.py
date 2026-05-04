@@ -184,6 +184,25 @@ def plot_equity_curves(
                 label="Benchmark" if ax_ is ax_nom else "_nolegend_",
             )
 
+    train_dates = {
+        e["train_end_date"]
+        for e in portfolio_data
+        if e.get("train_end_date") is not None
+    }
+    for td in sorted(train_dates):
+        for ax_ in (ax_nom, ax_log):
+            ax_.axvline(td, color=TEXT_DIM, linewidth=0.8, linestyle=":", alpha=0.7)
+            ax_.annotate(
+                "train | test",
+                xy=(td, 1),
+                xycoords=("data", "axes fraction"),
+                xytext=(4, -4),
+                textcoords="offset points",
+                fontsize=6,
+                color=TEXT_DIM,
+                va="top",
+            )
+
     ax_nom.set_title("Portfolio Value ($)")
     ax_nom.set_ylabel("Value ($)")
     ax_nom.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
@@ -415,6 +434,15 @@ def plot_band_search_curves(
             df = entry["band_search_results"].sort_values("band")
             metric = df["metric"].iloc[0]
             ax.plot(df["band"], df["score"], color=color, linewidth=1.2, label=name)
+            if "robust" in df.columns:
+                robust = df[df["robust"]]
+                if not robust.empty:
+                    ax.axvspan(
+                        robust["band"].min(),
+                        robust["band"].max(),
+                        color=color,
+                        alpha=0.08,
+                    )
             best = df.loc[df["score"].idxmax()]
             ax.scatter([best["band"]], [best["score"]], color=color, s=50, zorder=5)
             ax.annotate(
@@ -450,6 +478,15 @@ def plot_band_search_curves(
             color = color_map[name]
             df = entry["band_search_results"].sort_values("band")
             ax_1d.plot(df["band"], df["score"], color=color, linewidth=1.2, label=name)
+            if "robust" in df.columns:
+                robust = df[df["robust"]]
+                if not robust.empty:
+                    ax_1d.axvspan(
+                        robust["band"].min(),
+                        robust["band"].max(),
+                        color=color,
+                        alpha=0.08,
+                    )
             best = df.loc[df["score"].idxmax()]
             ax_1d.scatter([best["band"]], [best["score"]], color=color, s=40, zorder=5)
             ax_1d.annotate(
@@ -489,6 +526,20 @@ def plot_band_search_curves(
         )
 
         best = df.loc[df["score"].idxmax()]
+        robustness_threshold = entry["config"]["band_search"].get(
+            "robustness_threshold", 0.95
+        )
+        ax_hm.contour(
+            pivot.columns.values,
+            pivot.index.values,
+            pivot.values,
+            levels=[robustness_threshold * best["score"]],
+            colors=["white"],
+            linewidths=0.8,
+            linestyles=["--"],
+            alpha=0.55,
+        )
+
         ax_hm.scatter(
             [best["band"]],
             [best["corridor"]],
