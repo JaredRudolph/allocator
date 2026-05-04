@@ -108,6 +108,16 @@ def run_pipeline(
             f"Sharpe: {summary['sharpe']:.2f} | "
             f"Max DD: {summary['max_drawdown']:.2%}"
         )
+        if train_end_date is not None:
+            t_sharpe = summary.get("train_sharpe", float("nan"))
+            v_sharpe = summary.get("test_sharpe", float("nan"))
+            t_cagr = summary.get("train_cagr", float("nan"))
+            v_cagr = summary.get("test_cagr", float("nan"))
+            logger.info(
+                f"[{name}] Train/test -- "
+                f"Sharpe: {t_sharpe:.2f} / {v_sharpe:.2f} (gap {t_sharpe - v_sharpe:+.2f}) | "
+                f"CAGR: {t_cagr:.2%} / {v_cagr:.2%} (gap {t_cagr - v_cagr:+.2%})"
+            )
 
     comparison = pd.DataFrame(summaries).set_index("name")
     return comparison, portfolio_data
