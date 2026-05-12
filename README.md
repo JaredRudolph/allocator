@@ -1,6 +1,6 @@
 # corridor-backtest
 
-A portfolio backtesting engine focused on corridor rebalancing -- finding the optimal band widths for a given strategy. Supports multi-mode rebalancing, two-band corridor design, mean-variance optimization, 2D band search, and side-by-side strategy comparison.
+A portfolio backtesting engine focused on corridor rebalancing, finding the optimal band widths for a given strategy. Supports multi-mode rebalancing, two-band corridor design, mean-variance optimization, 2D band search, and side-by-side strategy comparison.
 
 ## Overview
 
@@ -28,34 +28,34 @@ corridor-backtest simulates portfolio behavior over historical price data. The c
 
 ## Key Concepts
 
-**Corridor rebalancing** -- rebalance only when an asset weight drifts outside a defined boundary, rather than on a fixed calendar schedule. A quiet year may see no trades; a volatile year triggers several. The width of that boundary is the core tuning parameter this project optimizes.
+**Corridor rebalancing**: rebalance only when an asset weight drifts outside a defined boundary, rather than on a fixed calendar schedule. A quiet year may see no trades; a volatile year triggers several. The width of that boundary is the core tuning parameter this project optimizes.
 
 | Mode | Behavior |
 |---|---|
 | `corridor` | Rebalance immediately when any weight breaches the outer corridor |
 | `periodic` | Rebalance on a fixed schedule (monthly or quarterly) |
 | `hybrid` | Check corridor conditions daily, execute only on schedule if a breach occurred since last rebalance |
-| `none` | Buy and hold -- no rebalancing |
+| `none` | Buy and hold, no rebalancing |
 
-**Two-band design** -- the corridor system uses two separate widths. The inner band (`band`) is the rebalancing destination: when `rebalance_to: band_edge`, trades stop at the nearest inner band edge rather than resetting all the way to target. The outer corridor (`corridor`) is the trigger boundary: a rebalance fires the moment any weight breaches this wider limit. Separating trigger from destination prevents chattering -- after moving to the band edge, the weight has room to drift before triggering again. This matters most on high-volatility instruments where a single shared band would fire and re-fire continuously.
+**Two-band design**: the corridor system uses two separate widths. The inner band (`band`) is the rebalancing destination: when `rebalance_to: band_edge`, trades stop at the nearest inner band edge rather than resetting all the way to target. The outer corridor (`corridor`) is the trigger boundary: a rebalance fires the moment any weight breaches this wider limit. Separating trigger from destination prevents chattering; after moving to the band edge, the weight has room to drift before triggering again. This matters most on high-volatility instruments where a single shared band would fire and re-fire continuously.
 
-**Absolute vs relative bands** -- absolute bands are fixed percentage-point distances from target (`target +/- band`). A 5% absolute band on a 25% target triggers at weights below 20% or above 30%. Relative bands scale with target weight (`target * (1 +/- band)`): a 10% relative band on a 25% target triggers at 22.5% or 27.5%. Relative bands apply proportionally tighter constraints to smaller positions.
+**Absolute vs relative bands**: absolute bands are fixed percentage-point distances from target (`target +/- band`). A 5% absolute band on a 25% target triggers at weights below 20% or above 30%. Relative bands scale with target weight (`target * (1 +/- band)`): a 10% relative band on a 25% target triggers at 22.5% or 27.5%. Relative bands apply proportionally tighter constraints to smaller positions.
 
-**Rebalance to target** -- restore all weights to their exact target allocations on each rebalance event. Higher turnover; the portfolio fully resets every time.
+**Rebalance to target**: restore all weights to their exact target allocations on each rebalance event. Higher turnover; the portfolio fully resets every time.
 
-**Rebalance to band_edge** -- move only the breached asset to the nearest inner band edge, then renormalize all weights to sum to 1. Executes the minimum trade needed to exit the breach while leaving in-band assets untouched.
+**Rebalance to band_edge**: move only the breached asset to the nearest inner band edge, then renormalize all weights to sum to 1. Executes the minimum trade needed to exit the breach while leaving in-band assets untouched.
 
-**Hybrid mode** -- corridor conditions are evaluated every trading day, but rebalancing only executes on a calendar schedule (monthly or quarterly) if a breach has occurred since the last rebalance. This gates corridor responsiveness behind a schedule, reducing turnover on high-volatility assets that would otherwise trigger constantly.
+**Hybrid mode**: corridor conditions are evaluated every trading day, but rebalancing only executes on a calendar schedule (monthly or quarterly) if a breach has occurred since the last rebalance. This gates corridor responsiveness behind a schedule, reducing turnover on high-volatility assets that would otherwise trigger constantly.
 
-**Band search** -- a parameter sweep that runs a full backtest for each candidate band width and scores it by a chosen metric. To avoid in-sample overfitting, the search runs on a configurable training window (default: first 70% of dates) and the best parameters are evaluated on the held-out test period. A robustness region identifies all candidates within a threshold of the best score (default: 95%), distinguishing a stable plateau from a sharp local optimum. A 2D search sweeps `(band, corridor)` pairs jointly across all valid combinations where `corridor > band`.
+**Band search**: a parameter sweep that runs a full backtest for each candidate band width and scores it by a chosen metric. To avoid in-sample overfitting, the search runs on a configurable training window (default: first 70% of dates) and the best parameters are evaluated on the held-out test period. A robustness region identifies all candidates within a threshold of the best score (default: 95%), distinguishing a stable plateau from a sharp local optimum. A 2D search sweeps `(band, corridor)` pairs jointly across all valid combinations where `corridor > band`.
 
-**Smart contribution** -- periodic cash is directed entirely to the most underweight asset rather than split pro-rata across all holdings. Uses the contribution itself as a low-friction rebalancing tool without incurring sell-side transaction costs.
+**Smart contribution**: periodic cash is directed entirely to the most underweight asset rather than split pro-rata across all holdings. Uses the contribution itself as a low-friction rebalancing tool without incurring sell-side transaction costs.
 
 ## Portfolios
 
 Eight strategies across four themes:
 
-**Rebalancing mode comparison** -- identical risk-parity allocation (SPY/TLT/GLD/IEF), isolating the effect of rebalancing mode:
+**Rebalancing mode comparison**: identical risk-parity allocation (SPY/TLT/GLD/IEF), isolating the effect of rebalancing mode:
 
 | Portfolio | Mode | Rebalance to |
 |---|---|---|
@@ -74,7 +74,7 @@ Eight strategies across four themes:
 |---|---|---|
 | `all_weather` | SPY/TLT/IEF/GLD/DBC | hybrid, rebalance to target |
 
-**Leveraged ETF corridor strategies** -- two-band design, `band_edge` rebalancing, Calmar-optimized via 2D search:
+**Leveraged ETF corridor strategies**: two-band design, `band_edge` rebalancing, Calmar-optimized via 2D search:
 
 | Portfolio | Assets | Notes |
 |---|---|---|
@@ -162,15 +162,15 @@ portfolios = [
 
 ## Performance Metrics
 
-**CAGR** (Compound Annual Growth Rate) -- total return annualized over the backtest period. `(end_value / start_value) ^ (1 / years) - 1`.
+**CAGR** (Compound Annual Growth Rate): total return annualized over the backtest period. `(end_value / start_value) ^ (1 / years) - 1`.
 
-**Sharpe ratio** -- annualized excess return above the risk-free rate, divided by annualized return volatility. Measures reward per unit of total risk; penalizes both upside and downside volatility equally.
+**Sharpe ratio**: annualized excess return above the risk-free rate, divided by annualized return volatility. Measures reward per unit of total risk; penalizes both upside and downside volatility equally.
 
-**Calmar ratio** -- CAGR divided by maximum drawdown. Rewards strategies that achieve returns without large peak-to-trough losses.
+**Calmar ratio**: CAGR divided by maximum drawdown. Rewards strategies that achieve returns without large peak-to-trough losses.
 
-**Sortino ratio** -- like Sharpe, but uses downside deviation (volatility of negative returns only) in the denominator. Upside volatility is not penalized.
+**Sortino ratio**: like Sharpe, but uses downside deviation (volatility of negative returns only) in the denominator. Upside volatility is not penalized.
 
-**Maximum drawdown** -- the largest peak-to-trough decline over the full backtest period, expressed as a percentage of the peak value.
+**Maximum drawdown**: the largest peak-to-trough decline over the full backtest period, expressed as a percentage of the peak value.
 
 ## Project Structure
 
@@ -198,12 +198,12 @@ corridor-backtest/
 
 ## Dependencies
 
-- `yfinance` -- market data
-- `pandas`, `numpy` -- data manipulation
-- `scipy` -- portfolio optimization
-- `matplotlib` -- dashboard plots
-- `loguru` -- logging
-- `pyarrow` -- parquet output
+- `yfinance`: market data
+- `pandas`, `numpy`: data manipulation
+- `scipy`: portfolio optimization
+- `matplotlib`: dashboard plots
+- `loguru`: logging
+- `pyarrow`: parquet output
 
 ```bash
 uv run pytest        # run tests
